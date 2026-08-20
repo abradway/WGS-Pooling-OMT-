@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pool Manifest Builder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#F3F5F2;
+    --surface:#FFFFFF;
+    --ink:#132420;
+    --ink-soft:#54635F;
+    --line:#DAE1DB;
+    --line-strong:#B9C4BC;
+    --accent:#1E6F69;
+    --accent-ink:#0E3E3A;
+    --accent-soft:#E3F0EE;
+    --saliva:#6C4F9C;
+    --saliva-soft:#EDE7F5;
+    --t30:#1E6F69;
+    --t30-soft:#E3F0EE;
+    --t60:#2E6E8E;
+    --t60-soft:#E4EEF3;
+    --t80:#9C4A22;
+    --t80-soft:#F5E9E1;
+    --pass:#2F6E4F;
+    --pass-soft:#E5F1EA;
+    --warn:#B4790A;
+    --warn-soft:#FBF0DD;
+    --fail:#AE2E22;
+    --fail-soft:#FAE7E3;
+    --radius:3px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'IBM Plex Sans', sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .page{max-width:1180px;margin:0 auto;padding:28px 24px 80px;}
+  .topbar{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    border-bottom:1px solid var(--line-strong);
+    padding-bottom:18px;
+    margin-bottom:28px;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--accent-ink);
+    background:var(--accent-soft);
+    padding:4px 8px;
+    border-radius:var(--radius);
+    display:inline-block;
+    margin-bottom:8px;
+  }
+  h1{
+    font-family:'Space Grotesk', sans-serif;
+    font-size:28px;
+    font-weight:700;
+    margin:0;
+    letter-spacing:-.01em;
+  }
+  .topbar .meta{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--ink-soft);text-align:right;}
+  .layout{display:grid;grid-template-columns:200px 1fr;gap:32px;align-items:start;}
+  @media (max-width:760px){.layout{grid-template-columns:1fr;} .rail{display:flex;overflow-x:auto;gap:10px;} .rail .step{min-width:150px;}}
+  .rail{position:sticky;top:20px;display:flex;flex-direction:column;gap:2px;}
+  .step{
+    display:flex;gap:10px;align-items:flex-start;
+    padding:12px 10px;border-left:2px solid var(--line);
+    font-size:12.5px;color:var(--ink-soft);
+  }
+  .step.active{border-left-color:var(--accent);color:var(--ink);}
+  .step .num{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;color:var(--accent-ink);font-weight:600;
+  }
+  .step .label{font-weight:500;}
+  .step .sub{font-size:11px;color:var(--ink-soft);margin-top:2px;}
+
+  .content{min-width:0;}
+  .card{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:22px;
+    margin-bottom:20px;
+  }
+  .drop{
+    border:1.5px dashed var(--line-strong);
+    border-radius:var(--radius);
+    padding:40px 20px;
+    text-align:center;
+    cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  .drop:hover, .drop.drag{border-color:var(--accent); background:var(--accent-soft);}
+  .drop h3{font-family:'Space Grotesk',sans-serif;margin:0 0 6px;font-size:16px;}
+  .drop p{margin:0;color:var(--ink-soft);font-size:13px;}
+  .drop input{display:none;}
+  .btn{
+    font-family:'IBM Plex Sans',sans-serif;
+    font-weight:600;font-size:13px;
+    background:var(--accent);color:#fff;
+    border:none;border-radius:var(--radius);
+    padding:10px 16px;cursor:pointer;
+    letter-spacing:.01em;
+  }
+  .btn:hover{background:var(--accent-ink);}
+  .btn.secondary{background:transparent;color:var(--accent-ink);border:1px solid var(--line-strong);}
+  .btn.secondary:hover{border-color:var(--accent);}
+  .filename{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent-ink);margin-top:10px;}
+  .error{
+    background:var(--fail-soft);color:var(--fail);border:1px solid var(--fail);
+    border-radius:var(--radius);padding:12px 14px;font-size:13px;margin-top:14px;
+  }
+  .warning{
+    background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn);
+    border-radius:var(--radius);padding:12px 14px;font-size:13px;margin-top:14px;
+  }
+  .hidden{display:none !important;}
+
+  .stat-row{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px;}
+  @media (max-width:760px){.stat-row{grid-template-columns:repeat(2,1fr);}}
+  .stat{border:1px solid var(--line);border-radius:var(--radius);padding:14px;background:var(--surface);}
+  .stat .n{font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:700;}
+  .stat .l{font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.06em;margin-top:2px;}
+  .stat.fail .n{color:var(--fail);} .stat.warn .n{color:var(--warn);} .stat.pass .n{color:var(--pass);} .stat.accent .n{color:var(--accent);}
+
+  .section-title{
+    font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:600;
+    margin:0 0 12px;display:flex;align-items:center;gap:8px;
+  }
+  .section-title .tag{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--ink-soft);font-weight:400;letter-spacing:.05em;}
+
+  /* lane visualization */
+  .lanes{display:flex;flex-direction:column;gap:8px;margin-bottom:6px;}
+  .lane{display:flex;gap:5px;align-items:center;}
+  .lane .lane-label{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--ink-soft);width:46px;flex-shrink:0;}
+  .slot{
+    flex:1;height:34px;border-radius:2px;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'IBM Plex Mono',monospace;font-size:9.5px;font-weight:600;
+    border:1px solid var(--line);color:#fff;letter-spacing:.02em;
+    overflow:hidden;white-space:nowrap;
+  }
+  .slot.empty{
+    background:transparent;border:1.5px dashed var(--line-strong);color:var(--ink-soft);font-weight:400;
+  }
+  .slot.other{background:var(--accent);}
+  .slot.saliva{background:var(--saliva);}
+  .lane-note{font-size:11.5px;color:var(--ink-soft);margin-bottom:18px;}
+
+  .group-card{border:1px solid var(--line);border-radius:var(--radius);margin-bottom:10px;overflow:hidden;}
+  .group-head{
+    display:flex;align-items:center;gap:10px;padding:11px 14px;
+    background:#FAFBF9;cursor:pointer;flex-wrap:wrap;
+  }
+  .group-head:hover{background:#F2F5F1;}
+  .group-id{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:12.5px;}
+  .pill{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.03em;
+    padding:2px 7px;border-radius:20px;text-transform:uppercase;
+  }
+  .pill.other{background:var(--accent-soft);color:var(--accent-ink);}
+  .pill.saliva{background:var(--saliva-soft);color:var(--saliva);}
+  .pill.ctrl{background:var(--warn-soft);color:var(--warn);}
+  .pill.review{background:var(--fail-soft);color:var(--fail);}
+  .pill.t30{background:var(--t30-soft);color:var(--t30);}
+  .pill.t60{background:var(--t60-soft);color:var(--t60);}
+  .pill.t80{background:var(--t80-soft);color:var(--t80);}
+  .pill.assumed{background:var(--warn-soft);color:var(--warn);}
+
+  .config-row{
+    display:flex;align-items:center;gap:10px;margin-top:16px;padding-top:16px;
+    border-top:1px solid var(--line);flex-wrap:wrap;
+  }
+  .config-row label{font-size:12.5px;color:var(--ink-soft);}
+  .config-row input{
+    width:70px;font-family:'IBM Plex Mono',monospace;font-size:13px;
+    border:1px solid var(--line-strong);border-radius:var(--radius);padding:5px 8px;
+  }
+  .config-row .tiers{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);margin-left:auto;}
+
+  .tier-table{margin-bottom:14px;}
+  .lane-bar-wrap{display:flex;flex-direction:column;gap:6px;margin-top:14px;}
+  .lane-bar-row{display:flex;align-items:center;gap:10px;}
+  .lane-bar-row .lb-label{width:110px;flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);}
+  .lane-bar-track{flex:1;height:22px;background:#EFF2EF;border-radius:2px;overflow:hidden;display:flex;}
+  .lane-bar-fill{height:100%;display:flex;align-items:center;}
+  .lane-bar-row .lb-val{width:120px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);flex-shrink:0;}
+  .group-count{font-size:12px;color:var(--ink-soft);margin-left:auto;font-family:'IBM Plex Mono',monospace;}
+  .chev{font-size:11px;color:var(--ink-soft);}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  thead th{
+    text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10.5px;
+    text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);
+    padding:8px 14px;border-bottom:1px solid var(--line);background:#FCFDFB;
+  }
+  tbody td{padding:7px 14px;border-bottom:1px solid #EEF1EE;font-family:'IBM Plex Mono',monospace;font-size:12px;}
+  tbody tr:last-child td{border-bottom:none;}
+  .flag-badge{font-size:10px;font-family:'IBM Plex Sans',sans-serif;font-weight:600;padding:2px 6px;border-radius:2px;}
+  .flag-clinical{background:var(--accent-soft);color:var(--accent-ink);}
+  .flag-control{background:var(--warn-soft);color:var(--warn);}
+
+  .excluded-table{margin-top:6px;}
+  .reason-fail{color:var(--fail);font-family:'IBM Plex Sans',sans-serif;font-weight:600;font-size:11.5px;}
+  .reason-warn{color:var(--warn);font-family:'IBM Plex Sans',sans-serif;font-weight:600;font-size:11.5px;}
+
+  details.rules{margin-top:20px;}
+  details.rules summary{cursor:pointer;font-size:12.5px;color:var(--accent-ink);font-weight:600;margin-bottom:8px;}
+  .rules-body{font-size:12.5px;color:var(--ink-soft);line-height:1.6;}
+  .rules-body code{font-family:'IBM Plex Mono',monospace;background:var(--accent-soft);padding:1px 5px;border-radius:2px;color:var(--accent-ink);}
+
+  .download-bar{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-top:24px;}
+  .download-bar p{margin:0;font-size:12px;color:var(--ink-soft);}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="topbar">
+    <div>
+      <span class="eyebrow">Sequencing / Library Pooling</span>
+      <h1>Pool Manifest Builder</h1>
+    </div>
+    <div class="meta" id="topMeta">Coverage tiers: 30X · 60X · 80X</div>
+  </div>
+
+  <div class="layout">
+    <nav class="rail" id="rail">
+      <div class="step active" data-step="1">
+        <span class="num">01</span>
+        <div><div class="label">Upload sheet</div><div class="sub">.xlsx / .xls / .csv</div></div>
+      </div>
+      <div class="step" data-step="2">
+        <span class="num">02</span>
+        <div><div class="label">Validate</div><div class="sub">qPCR, index, material</div></div>
+      </div>
+      <div class="step" data-step="3">
+        <span class="num">03</span>
+        <div><div class="label">Assign pools</div><div class="sub">8–48, by coverage tier</div></div>
+      </div>
+      <div class="step" data-step="4">
+        <span class="num">04</span>
+        <div><div class="label">Export</div><div class="sub">Manifest + lane summary</div></div>
+      </div>
+    </nav>
+
+    <main class="content">
+
+      <section class="card" id="uploadCard">
+        <div class="drop" id="dropZone">
+          <h3>Drop your sample sheet(s) here</h3>
+          <p>or click to browse — upload one or several at once. Each needs Barcode, Product, Molecular Index, Original Material type columns, plus any column whose values look like "12.3 nM"</p>
+          <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" multiple>
+        </div>
+        <div class="filename hidden" id="filename"></div>
+        <div class="warning hidden" id="fileWarningBox"></div>
+        <div class="error hidden" id="errorBox"></div>
+        <div class="config-row">
+          <label for="laneCapacity">Full-lane capacity</label>
+          <input type="number" id="laneCapacity" value="240" min="1" step="1">
+          <span style="font-size:12.5px;color:var(--ink-soft);">X (per Coverage.xlsx)</span>
+          <span class="tiers" id="tierFractions">30X → 0.1250 · 60X → 0.2500 · 80X → 0.3333</span>
+        </div>
+      </section>
+
+      <section id="results" class="hidden">
+
+        <div class="stat-row" id="statRow"></div>
+
+        <div class="card">
+          <h2 class="section-title">Lane loading <span class="tag">by coverage tier · lanes = ⌈samples × lane fraction⌉</span></h2>
+          <div id="tierTable"></div>
+          <div class="lane-bar-wrap" id="laneBars"></div>
+        </div>
+
+        <div class="card">
+          <h2 class="section-title">Pool groups <span class="tag" id="groupTag"></span></h2>
+          <div id="groupList"></div>
+        </div>
+
+        <div class="card">
+          <h2 class="section-title">Excluded / needs review <span class="tag" id="excludedTag"></span></h2>
+          <div id="excludedWrap"></div>
+        </div>
+
+        <details class="rules">
+          <summary>Rules applied to this run</summary>
+          <div class="rules-body">
+            <p>• <strong>Multiple sheets:</strong> upload one or several sample sheets at once — each is column-matched independently (since the qPCR header can differ per batch), then all rows are pooled together before grouping, so samples from different sheets can end up in the same pool group. If a particular file's columns can't be matched, only that file is skipped (with a note); the rest still process.</p>
+            <p>• <strong>qPCR column:</strong> its header changes per sheet (often a batch/run ID), so it's detected by content instead — whichever column's values contain a number next to "nM" wins. Triplicate values in one cell (e.g. "12.3nM, 11.9nM, 12.5nM") are averaged.</p>
+            <p>• <strong>qPCR QC:</strong> valid range is <code>0.9nM ≤ x &lt; 25nM</code>. Below 0.9nM → excluded, flagged <em>Failed (low)</em>. 25nM or above → excluded, flagged <em>Out of range (high)</em>.</p>
+            <p>• <strong>Material buckets:</strong> Saliva bucket = Bodily Fluid:Saliva, BODILY_FLUID_SALIVA, OTHER_BUCCAL_SWAB, Other:Buccal Swab, Saliva. Everything else pools together as one "Other" bucket. The two buckets never mix in the same group.</p>
+            <p>• <strong>Clinical priority:</strong> samples with Product = "Clinical Genome Sequencing - Technical Only v2" (either variant) can share a group with non-clinical samples, but are placed into groups first, so they fill early groups ahead of non-clinical samples.</p>
+            <p>• <strong>Molecular Index:</strong> no duplicate index within a single group. Rows with a blank index are excluded and flagged for review.</p>
+            <p>• <strong>Group size:</strong> 8–48 samples per group. Groups formed below 8 are rebalanced into earlier groups where possible; if that's not possible, they're flagged <em>below minimum</em> rather than silently shipped.</p>
+            <p>• <strong>Controls:</strong> identified by a blank Product field. At most one control per group; not every group needs one. A control swaps in for one non-control sample in an existing group (rather than being added on top), so the group's size — and its lane count — doesn't change.</p>
+            <p>• <strong>Coverage tier:</strong> clinical samples always target 30X. Non-clinical samples are read from the Product text (looking for "30X"/"60X"/"80X"); a Product with no coverage number is assumed 30X and flagged for review; a Product with an unsupported number (anything other than 30/60/80) is excluded and flagged.</p>
+            <p>• <strong>Group sizing:</strong> within each material bucket and coverage tier, group sizes are chosen (within 8–48) to land as close as possible to that tier's ideal lane fraction — multiples of 8 for 30X, 4 for 60X, 3 for 80X — but an exact multiple isn't required. Leftover samples just join the nearest group rather than being held out.</p>
+            <p>• <strong>Lanes don't have to be whole numbers</strong> in principle (lanes = samples × lane fraction), but physical lanes do, so the total is rounded per this rule: if the fractional remainder is at least 15% of a lane, round up (matches the reference Coverage.xlsx, e.g. 47 samples × 0.125 = 5.875 → 6). If the remainder is under 15%, round down instead of wasting most of an extra lane — e.g. 25 samples × 0.125 = 3.125 → 3 lanes, not 4.</p>
+            <p>• <strong>Lanes:</strong> for each coverage tier, lanes needed = total samples at that tier × lane fraction — always a whole number by construction. Buckets share lanes within the same tier (different index sets can be multiplexed on the same physical lane); tiers are reported separately since they need different depth.</p>
+          </div>
+        </details>
+
+        <div class="download-bar">
+          <p id="downloadNote">Manifest includes pool assignments, excluded/review rows, and a summary sheet.</p>
+          <button class="btn" id="downloadBtn">Download manifest (.xlsx)</button>
+        </div>
+
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<script>
+(function(){
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+  const filenameEl = document.getElementById('filename');
+  const errorBox = document.getElementById('errorBox');
+  const fileWarningBox = document.getElementById('fileWarningBox');
+  const results = document.getElementById('results');
+  const rail = document.getElementById('rail');
+  const laneCapacityInput = document.getElementById('laneCapacity');
+
+  let lastRun = null; // holds processed data for export
+  let lastFileSets = null; // [{filename, rows}] per successfully-parsed file, for reprocessing on config change
+  let showSourceCol = false; // whether the on-screen tables show a Source File column (only when >1 file loaded)
+
+  function fullLaneCapacity(){
+    const v = parseFloat(laneCapacityInput.value);
+    return (isFinite(v) && v > 0) ? v : 240;
+  }
+  function updateTierFractionsDisplay(){
+    const cap = fullLaneCapacity();
+    document.getElementById('tierFractions').textContent =
+      TIERS.map(t => t + 'X → ' + (t/cap).toFixed(4)).join(' · ');
+  }
+  laneCapacityInput.addEventListener('input', () => {
+    updateTierFractionsDisplay();
+    if (lastFileSets && lastFileSets.length) processAllFiles(lastFileSets);
+  });
+
+  dropZone.addEventListener('click', () => fileInput.click());
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('drag');
+    if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
+  });
+  fileInput.addEventListener('change', e => {
+    if (e.target.files.length) handleFiles(e.target.files);
+  });
+
+  function setStep(n){
+    rail.querySelectorAll('.step').forEach(s => s.classList.toggle('active', Number(s.dataset.step) === n));
+  }
+
+  function showError(msg){
+    errorBox.textContent = msg;
+    errorBox.classList.remove('hidden');
+    results.classList.add('hidden');
+  }
+  function clearError(){ errorBox.classList.add('hidden'); }
+  function showFileWarning(msg){
+    fileWarningBox.textContent = msg;
+    fileWarningBox.classList.remove('hidden');
+  }
+  function clearFileWarning(){ fileWarningBox.classList.add('hidden'); }
+
+  function readFileAsRows(file){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        try{
+          const data = new Uint8Array(e.target.result);
+          const wb = XLSX.read(data, {type:'array'});
+          const sheetName = wb.SheetNames[0];
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {defval:''});
+          if (!rows.length){ reject(new Error(file.name + ': no data rows to read')); return; }
+          resolve({ filename: file.name, rows });
+        }catch(err){
+          reject(new Error(file.name + ': ' + (err.message || 'could not be read — make sure it\'s a valid .xlsx, .xls, or .csv')));
+        }
+      };
+      reader.onerror = () => reject(new Error(file.name + ': could not be read from disk'));
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  async function handleFiles(fileList){
+    clearError();
+    clearFileWarning();
+    const files = Array.from(fileList);
+    filenameEl.textContent = 'Reading ' + files.length + ' file' + (files.length===1?'':'s') + '…';
+    filenameEl.classList.remove('hidden');
+
+    const results_ = await Promise.allSettled(files.map(readFileAsRows));
+    const fileSets = [];
+    const readIssues = [];
+    results_.forEach(r => {
+      if (r.status === 'fulfilled') fileSets.push(r.value);
+      else readIssues.push(r.reason.message);
+    });
+
+    if (!fileSets.length){
+      filenameEl.classList.add('hidden');
+      showError('Could not read any of the uploaded files. ' + readIssues.join('; '));
+      return;
+    }
+
+    filenameEl.textContent = fileSets.length + ' file' + (fileSets.length===1?'':'s') + ' loaded: ' + fileSets.map(f=>f.filename).join(', ');
+    lastFileSets = fileSets;
+    processAllFiles(fileSets, readIssues);
+  }
+
+  function processAllFiles(fileSets, readIssues){
+    readIssues = readIssues || [];
+    const allSamples = [];
+    const fileIssues = readIssues.slice();
+
+    fileSets.forEach(({filename, rows}) => {
+      const { samples, error } = extractSamples(rows, filename);
+      if (error){ fileIssues.push(filename + ': ' + error); return; }
+      allSamples.push(...samples);
+    });
+
+    if (fileIssues.length){
+      showFileWarning((fileIssues.length===1?'1 file was skipped: ':fileIssues.length+' files were skipped: ') + fileIssues.join(' · '));
+    } else {
+      clearFileWarning();
+    }
+
+    if (!allSamples.length){
+      showError('None of the uploaded files had usable rows once column matching was applied.');
+      return;
+    }
+    clearError();
+    runPipeline(allSamples);
+  }
+
+  // ---------- column matching ----------
+  function normKey(s){ return String(s).toLowerCase().replace(/[^a-z0-9]/g,''); }
+  const FIELD_PATTERNS = {
+    barcode: ['barcode'],
+    product: ['product'],
+    molIndex: ['molecularindex','molindex'],
+    material: ['originalmaterialtype','materialtype','originalmaterial'],
+  };
+  const NM_VALUE_RE = /\d+(\.\d+)?\s*nm\b/i;
+
+  // The qPCR column's header is often a dynamic batch/run identifier
+  // (e.g. "20438135_WGS_36934_2026-06-29 123006") that changes per sheet, so
+  // header-name matching doesn't work for it. Instead, detect it by content:
+  // whichever column's values contain a number next to "nM" wins. Falls back
+  // to a header-text match ("qpcr") if no column's content matches at all.
+  function findQPCRColumn(rows, excludeKeys){
+    const keys = Object.keys(rows[0]).filter(k => !excludeKeys.includes(k));
+    const sampleSize = Math.min(rows.length, 300);
+    let bestKey = null, bestScore = 0;
+    keys.forEach(k => {
+      let score = 0;
+      for (let i=0;i<sampleSize;i++){
+        const v = rows[i][k];
+        if (v !== undefined && v !== null && v !== '' && NM_VALUE_RE.test(String(v))) score++;
+      }
+      if (score > bestScore){ bestScore = score; bestKey = k; }
+    });
+    if (bestKey) return bestKey;
+    return Object.keys(rows[0]).find(k => normKey(k).includes('qpcr')) || null;
+  }
+
+  function buildColumnMap(rows){
+    const sampleRow = rows[0];
+    const keys = Object.keys(sampleRow);
+    const map = {};
+    for (const field in FIELD_PATTERNS){
+      const patterns = FIELD_PATTERNS[field];
+      let found = keys.find(k => patterns.some(p => normKey(k).includes(p)));
+      map[field] = found || null;
+    }
+    map.qpcr = findQPCRColumn(rows, Object.values(map).filter(Boolean));
+    return map;
+  }
+
+  // ---------- value parsing ----------
+  function parseQPCR(raw){
+    if (raw === '' || raw === null || raw === undefined) return NaN;
+    const str = String(raw);
+    // Prefer numbers explicitly tagged with nM — handles triplicate cells
+    // like "12.3nM, 11.9nM, 12.5nM" without picking up unrelated digits.
+    const nmMatches = str.match(/\d+(\.\d+)?\s*nm\b/gi);
+    if (nmMatches && nmMatches.length){
+      const nums = nmMatches.map(m => parseFloat(m));
+      return nums.reduce((a,b)=>a+b,0) / nums.length;
+    }
+    if (typeof raw === 'number') return raw;
+    const matches = str.match(/-?\d+(\.\d+)?/g);
+    if (!matches || !matches.length) return NaN;
+    const nums = matches.map(Number);
+    return nums.reduce((a,b)=>a+b,0) / nums.length;
+  }
+
+  const SALIVA_SYNONYMS = ['bodily fluid:saliva','bodily_fluid_saliva','other_buccal_swab','other:buccal swab','saliva'];
+  function normMaterial(v){
+    return String(v||'').trim().toLowerCase().replace(/\s+/g,' ').replace(/\s*:\s*/g, ':');
+  }
+  function isSaliva(v){ return SALIVA_SYNONYMS.includes(normMaterial(v)); }
+
+  function normProduct(v){ return String(v||'').trim().toLowerCase().replace(/\s+/g,' '); }
+  function isClinical(v){ return normProduct(v).startsWith('clinical genome sequencing - technical only v2'); }
+  function isControl(v){ return normProduct(v) === ''; }
+
+  // ---------- coverage tier ----------
+  const TIERS = [30, 60, 80];
+  function idealFraction(tier){ return tier / fullLaneCapacity(); }
+  function classifyTier(product, clinicalFlag, controlFlag){
+    if (clinicalFlag) return { tier: 30, source: 'clinical' };
+    const m = String(product||'').match(/(\d{1,3})\s*x\b/i);
+    if (!m){
+      return { tier: 30, source: controlFlag ? 'control' : 'assumed' };
+    }
+    const num = parseInt(m[1], 10);
+    if (TIERS.includes(num)) return { tier: num, source: 'matched' };
+    return { tier: null, source: 'unsupported', num };
+  }
+
+  // ---------- core processing ----------
+  function extractSamples(rows, filename){
+    const colMap = buildColumnMap(rows);
+    const missing = Object.keys(colMap).filter(f => !colMap[f]);
+    if (missing.length){
+      const labels = missing.map(f => f === 'qpcr' ? 'qPCR (a column with values like "12.3 nM")' : f);
+      return { samples: [], error: 'could not find a column for ' + labels.join(', ') };
+    }
+
+    const samples = [];
+    rows.forEach((row, i) => {
+      const barcode = row[colMap.barcode];
+      const product = row[colMap.product];
+      const molIndexRaw = row[colMap.molIndex];
+      const molIndex = String(molIndexRaw === undefined || molIndexRaw === null ? '' : molIndexRaw).trim();
+      const material = row[colMap.material];
+      const qpcrRaw = row[colMap.qpcr];
+      const qpcr = parseQPCR(qpcrRaw);
+
+      const clinicalFlag = isClinical(product);
+      const controlFlag = isControl(product);
+      const tierInfo = classifyTier(product, clinicalFlag, controlFlag);
+
+      const s = {
+        sourceFile: filename,
+        rowNum: i+2, // account for header row, 1-indexed sheet rows (within its own file)
+        barcode: barcode === undefined ? '' : String(barcode).trim(),
+        product: product === undefined ? '' : String(product).trim(),
+        molIndex,
+        material: material === undefined ? '' : String(material).trim(),
+        qpcrRaw,
+        qpcr,
+        bucket: isSaliva(material) ? 'saliva' : 'other',
+        clinical: clinicalFlag,
+        control: controlFlag,
+        tier: tierInfo.tier,
+        tierSource: tierInfo.source,
+      };
+
+      // QC gate
+      if (isNaN(s.qpcr)){
+        s.excludeReason = 'Missing/unreadable qPCR value';
+        s.excludeSeverity = 'fail';
+      } else if (s.qpcr < 0.9){
+        s.excludeReason = 'Failed (low) — qPCR ' + s.qpcr.toFixed(3) + 'nM < 0.9nM';
+        s.excludeSeverity = 'fail';
+      } else if (s.qpcr >= 25){
+        s.excludeReason = 'Out of range (high) — qPCR ' + s.qpcr.toFixed(3) + 'nM ≥ 25nM';
+        s.excludeSeverity = 'warn';
+      } else if (!s.molIndex){
+        s.excludeReason = 'Missing Molecular Index';
+        s.excludeSeverity = 'fail';
+      } else if (tierInfo.tier === null){
+        s.excludeReason = 'Unsupported coverage "' + tierInfo.num + 'X" in Product (expected 30/60/80)';
+        s.excludeSeverity = 'warn';
+      }
+      samples.push(s);
+    });
+
+    return { samples, error: null };
+  }
+
+  function runPipeline(samples){
+    const excluded = samples.filter(s => s.excludeReason);
+    const eligible = samples.filter(s => !s.excludeReason);
+
+    const buckets = { other: [], saliva: [] };
+    eligible.forEach(s => buckets[s.bucket].push(s));
+
+    const allGroups = [];
+    ['saliva','other'].forEach(bucketKey => {
+      const groups = buildBucketGroups(buckets[bucketKey], bucketKey);
+      groups.forEach(g => allGroups.push(g));
+    });
+
+    // sequential IDs, grouped by bucket then tier, natural order preserved within each
+    let ctr = {};
+    allGroups.forEach(g => {
+      const key = g.bucket + '-' + g.tier;
+      ctr[key] = (ctr[key]||0) + 1;
+      const n = String(ctr[key]).padStart(2,'0');
+      g.id = (g.bucket === 'saliva' ? 'SALIVA-' : 'OTHER-') + g.tier + 'X-' + n + (g.controlOverflow ? '-CTRL' : '');
+    });
+
+    // tier-level lane summary — aggregated across both buckets, since different
+    // index sets can share a physical lane regardless of material bucket.
+    // Lanes are allowed to be fractional in principle (lanes = samples ×
+    // fraction); rounded to a whole number of physical lanes using the 15%
+    // threshold rule (see roundLanes) rather than always rounding up.
+    const tierTotals = {};
+    eligible.forEach(s => {
+      if (s.control) return;
+      if (!tierTotals[s.tier]) tierTotals[s.tier] = 0;
+      tierTotals[s.tier] += 1;
+    });
+    allGroups.forEach(g => {
+      const controlCount = g.samples.filter(s=>s.control).length;
+      if (controlCount){
+        if (!tierTotals[g.tier]) tierTotals[g.tier] = 0;
+        tierTotals[g.tier] += controlCount;
+      }
+    });
+    const tierSummary = Object.keys(tierTotals).map(Number).sort((a,b)=>a-b).map(tier => {
+      const frac = idealFraction(tier);
+      const n = tierTotals[tier];
+      const exact = n*frac;
+      return { tier, sampleCount: n, fraction: frac, exactLanesValue: exact, lanes: roundLanes(exact) };
+    });
+
+    lastRun = { samples, excluded, groups: allGroups, tierSummary };
+    render(lastRun);
+    setStep(4);
+  }
+
+  // Round a fractional lane count to a whole number of physical lanes. Per
+  // the reference Coverage.xlsx and the 15% rule: if the fractional
+  // remainder is at least 15% of a lane, round up (safer — avoids
+  // under-covering samples); otherwise round down (avoids wasting most of a
+  // lane's capacity for a small excess). E.g. 5.875 -> 6 (87.5% remainder),
+  // but 3.125 -> 3 (12.5% remainder, under the 15% cutoff).
+  function roundLanes(exactValue){
+    const whole = Math.floor(exactValue);
+    const remainder = exactValue - whole;
+    if (remainder < 1e-9) return whole;
+    return (remainder >= 0.15) ? whole + 1 : whole;
+  }
+
+  // Find the smallest denominator d (<= maxDenom) such that d * fraction lands
+  // on (very nearly) a whole number — e.g. 0.125 -> 8, 0.25 -> 4, 1/3 -> 3.
+  // Group sizes that are multiples of this denominator hit the target lane
+  // fraction exactly; sizes that aren't will land close instead — lanes no
+  // longer have to be exact, so this is a preference, not a hard requirement.
+  function bestDenom(fraction, maxDenom){
+    for (let d=1; d<=maxDenom; d++){
+      const v = d*fraction;
+      if (Math.abs(v - Math.round(v)) < 1e-6) return d;
+    }
+    return maxDenom;
+  }
+
+  // Plan target group sizes within [8,48], preferring multiples of the tier's
+  // ideal-lane-fraction denominator so the realized lane fraction lands as
+  // close as possible to the target, instead of just splitting evenly.
+  function computeGroupSizes(N, fraction){
+    if (N === 0) return [];
+    if (N < 8) return [N];
+    const denom = Math.min(48, bestDenom(fraction, 48));
+    const minMultiple = Math.max(denom, Math.ceil(8/denom)*denom);
+    const maxMultiple = Math.max(minMultiple, Math.floor(48/denom)*denom);
+    let k = Math.max(1, Math.ceil(N/maxMultiple));
+    let sizes;
+    let guard = 0;
+    while (guard < 20){
+      guard++;
+      const base = Math.floor(N/k);
+      let baseRounded = Math.floor(base/denom)*denom;
+      if (baseRounded < minMultiple) baseRounded = minMultiple;
+      if (baseRounded > maxMultiple) baseRounded = maxMultiple;
+      const lastSize = N - baseRounded*(k-1);
+      if (lastSize > maxMultiple){ k++; continue; }
+      sizes = new Array(Math.max(0,k-1)).fill(baseRounded);
+      sizes.push(lastSize);
+      break;
+    }
+    if (!sizes) sizes = [N];
+    return sizes;
+  }
+
+  function buildBucketGroups(list, bucketKey){
+    const controls = list.filter(s => s.control);
+    const nonControls = list.filter(s => !s.control);
+
+    const tiersPresent = Array.from(new Set(nonControls.map(s => s.tier))).sort((a,b)=>a-b);
+    let groups = [];
+    tiersPresent.forEach(tier => {
+      const tierSamples = nonControls.filter(s => s.tier === tier);
+      tierSamples.sort((a,b) => (b.clinical?1:0) - (a.clinical?1:0));
+      let tierGroups = packIntoGroups(tierSamples, computeGroupSizes(tierSamples.length, idealFraction(tier)));
+      tierGroups = rebalance(tierGroups);
+      tierGroups.forEach(g => { g.tier = tier; });
+      groups = groups.concat(tierGroups);
+    });
+
+    // place controls, one per group, within this bucket — tier-agnostic,
+    // since a control is a process control, not a coverage commitment.
+    const leftoverControls = [];
+    controls.forEach(ctrl => {
+      let placed = false;
+      for (const g of groups){
+        if (g.samples.length < 48 && !g.hasControl && !g.usedIdx.has(ctrl.molIndex)){
+          g.samples.push(ctrl);
+          g.usedIdx.add(ctrl.molIndex);
+          g.hasControl = true;
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) leftoverControls.push(ctrl);
+    });
+
+    if (leftoverControls.length){
+      let extra = packIntoGroups(leftoverControls, computeGroupSizes(leftoverControls.length, idealFraction(30)));
+      extra = rebalance(extra);
+      extra.forEach(g => { g.controlOverflow = true; g.hasControl = g.samples.length > 0; g.tier = 30; });
+      groups = groups.concat(extra);
+    }
+
+    groups.forEach(g => {
+      g.bucket = bucketKey;
+      g.belowMin = g.samples.length < 8;
+      g.clinicalCount = g.samples.filter(s=>s.clinical).length;
+    });
+    return groups;
+  }
+
+  function packIntoGroups(list, capSizes){
+    let pending = list.slice();
+    const groups = [];
+    let capIdx = 0;
+    while (pending.length){
+      const cap = capSizes[capIdx] !== undefined ? capSizes[capIdx] : 48;
+      capIdx++;
+      const group = { samples: [], usedIdx: new Set(), hasControl:false };
+      const remaining = [];
+      for (const s of pending){
+        if (group.samples.length < cap && !group.usedIdx.has(s.molIndex)){
+          group.samples.push(s);
+          group.usedIdx.add(s.molIndex);
+        } else {
+          remaining.push(s);
+        }
+      }
+      groups.push(group);
+      if (remaining.length === pending.length) break; // safety valve — remaining share indexes already used everywhere
+      pending = remaining;
+    }
+    return groups;
+  }
+
+  // Sweep every under-8 group (not just the last one) and try to redistribute
+  // its samples into any other group with room and no index conflict, up to
+  // the hard 48 cap. Anything left over stays flagged as below minimum —
+  // that reflects a genuine data constraint (e.g. too few distinct indexes),
+  // not something safe to paper over by merging duplicate indexes.
+  function rebalance(groups){
+    let changed = true;
+    let guard = 0;
+    while (changed && guard < 50){
+      changed = false; guard++;
+      for (let gi = groups.length-1; gi>=0; gi--){
+        const g = groups[gi];
+        if (g.samples.length > 0 && g.samples.length < 8 && groups.length > 1){
+          const stillHere = [];
+          g.samples.forEach(s => {
+            let moved = false;
+            for (let i=0;i<groups.length;i++){
+              if (i===gi) continue;
+              const target = groups[i];
+              if (target.samples.length < 48 && !target.usedIdx.has(s.molIndex)){
+                target.samples.push(s); target.usedIdx.add(s.molIndex); moved = true; break;
+              }
+            }
+            if (!moved) stillHere.push(s);
+          });
+          if (stillHere.length < g.samples.length) changed = true;
+          g.samples = stillHere;
+          if (g.samples.length === 0){ groups.splice(gi,1); changed = true; }
+        }
+      }
+    }
+    return groups.filter(g => g.samples.length > 0);
+  }
+
+  // ---------- rendering ----------
+  function esc(s){ return String(s===undefined||s===null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+  function render(run){
+    results.classList.remove('hidden');
+
+    const totalIn = run.samples.length;
+    const excludedCount = run.excluded.length;
+    const groupCount = run.groups.length;
+    const belowMinCount = run.groups.filter(g=>g.belowMin).length;
+    const totalLanes = Math.round(run.tierSummary.reduce((a,t)=>a+t.lanes,0));
+    const fileCount = new Set(run.samples.map(s=>s.sourceFile)).size;
+    showSourceCol = fileCount > 1;
+
+    document.getElementById('statRow').innerHTML = [
+      stat(fileCount,'Source files','accent'),
+      stat(totalIn,'Rows read','accent'),
+      stat(totalIn-excludedCount,'Passed QC','pass'),
+      stat(excludedCount,'Excluded / flagged', excludedCount ? 'warn':'accent'),
+      stat(groupCount,'Pool groups formed','accent'),
+      stat(totalLanes,'Total lanes needed','accent'),
+    ].join('');
+
+    renderTierSection(run.tierSummary);
+
+    document.getElementById('groupTag').textContent = groupCount + ' group' + (groupCount===1?'':'s') + (belowMinCount ? ' · ' + belowMinCount + ' below minimum' : '');
+    document.getElementById('groupList').innerHTML = run.groups.map(renderGroup).join('') || '<p style="color:var(--ink-soft);font-size:13px;">No pool groups could be formed from this sheet.</p>';
+
+    document.getElementById('excludedTag').textContent = excludedCount + ' row' + (excludedCount===1?'':'s');
+    document.getElementById('excludedWrap').innerHTML = renderExcluded(run.excluded);
+
+    document.querySelectorAll('.group-head').forEach(h => {
+      h.addEventListener('click', () => {
+        const body = h.nextElementSibling;
+        body.classList.toggle('hidden');
+      });
+    });
+  }
+
+  function stat(n,label,tone){
+    return '<div class="stat '+tone+'"><div class="n">'+n+'</div><div class="l">'+label+'</div></div>';
+  }
+
+  const TIER_TONE = { 30:'t30', 60:'t60', 80:'t80' };
+
+  function renderTierSection(tierSummary){
+    const tableEl = document.getElementById('tierTable');
+    const barsEl = document.getElementById('laneBars');
+    if (!tierSummary.length){
+      tableEl.innerHTML = '<p style="color:var(--ink-soft);font-size:12.5px;">No eligible samples yet.</p>';
+      barsEl.innerHTML = '';
+      return;
+    }
+    const rows = tierSummary.map(t => `
+      <tr>
+        <td><span class="pill ${TIER_TONE[t.tier]||'other'}">${t.tier}X</span></td>
+        <td>${t.sampleCount}</td>
+        <td>${t.fraction.toFixed(4)}</td>
+        <td>${t.exactLanesValue.toFixed(3)}</td>
+        <td>${t.lanes}</td>
+      </tr>`).join('');
+    tableEl.innerHTML = `<table class="tier-table">
+      <thead><tr><th>Coverage tier</th><th>Samples</th><th>Ideal lane fraction</th><th>Exact lanes</th><th>Lanes (rounded)</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+    const maxLanes = Math.max(...tierSummary.map(t=>t.lanes), 1);
+    barsEl.innerHTML = tierSummary.map(t => {
+      const pct = Math.max(4, (t.lanes/maxLanes)*100);
+      const color = 'var(--' + (TIER_TONE[t.tier]||'accent') + ')';
+      return `<div class="lane-bar-row">
+        <div class="lb-label">${t.tier}X</div>
+        <div class="lane-bar-track"><div class="lane-bar-fill" style="width:${pct}%;background:${color};"></div></div>
+        <div class="lb-val">${t.lanes} lane${t.lanes===1?'':'s'} · ${t.sampleCount} samples</div>
+      </div>`;
+    }).join('');
+  }
+
+  function renderGroup(g){
+    const bucketPill = g.bucket === 'saliva' ? '<span class="pill saliva">Saliva</span>' : '<span class="pill other">Other</span>';
+    const tierPill = `<span class="pill ${TIER_TONE[g.tier]||'other'}">${g.tier}X</span>`;
+    const ctrlPill = g.hasControl ? '<span class="pill ctrl">Control</span>' : '';
+    const reviewPill = g.belowMin ? '<span class="pill review">Below minimum</span>' : '';
+    const exactLanes = g.samples.length * idealFraction(g.tier);
+    const roundedLanes = roundLanes(exactLanes);
+    const lanesLabel = (Math.abs(exactLanes-roundedLanes)<1e-9)
+      ? roundedLanes + ' lane' + (roundedLanes===1?'':'s')
+      : exactLanes.toFixed(3) + ' → ' + roundedLanes + ' lane' + (roundedLanes===1?'':'s');
+    const rows = g.samples.map(s => `
+      <tr>
+        <td>${esc(s.barcode)}</td>
+        <td>${esc(s.product) || '<span style="color:var(--ink-soft)">(blank)</span>'}</td>
+        <td>${esc(s.molIndex)}</td>
+        <td>${esc(s.material)}</td>
+        <td>${isNaN(s.qpcr) ? '—' : s.qpcr.toFixed(3)+' nM'}</td>
+        <td>${s.tier}X${s.tierSource==='assumed' ? ' <span class="pill assumed" title="No coverage number found in Product — assumed 30X">assumed</span>' : ''}</td>
+        <td>${s.clinical ? '<span class="flag-badge flag-clinical">CLINICAL</span>' : ''} ${s.control ? '<span class="flag-badge flag-control">CONTROL</span>' : ''}</td>
+        ${showSourceCol ? '<td>'+esc(s.sourceFile)+'</td>' : ''}
+      </tr>`).join('');
+    return `
+      <div class="group-card">
+        <div class="group-head">
+          <span class="group-id">${esc(g.id)}</span>
+          ${bucketPill} ${tierPill} ${ctrlPill} ${reviewPill}
+          <span class="group-count">${g.samples.length} samples · ${lanesLabel}${g.clinicalCount ? ' · '+g.clinicalCount+' clinical':''}</span>
+          <span class="chev">▾</span>
+        </div>
+        <div class="hidden">
+          <table>
+            <thead><tr><th>Barcode</th><th>Product</th><th>Molecular Index</th><th>Material type</th><th>qPCR (avg)</th><th>Coverage</th><th>Flags</th>${showSourceCol ? '<th>Source</th>' : ''}</tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  function renderExcluded(list){
+    if (!list.length) return '<p style="color:var(--ink-soft);font-size:13px;">Nothing excluded — every row passed QC.</p>';
+    const rows = list.map(s => `
+      <tr>
+        <td>${esc(s.barcode)}</td>
+        <td>${esc(s.product) || '<span style="color:var(--ink-soft)">(blank)</span>'}</td>
+        <td>${esc(s.molIndex) || '—'}</td>
+        <td>${esc(s.material)}</td>
+        <td>${s.qpcrRaw===''||s.qpcrRaw===undefined||s.qpcrRaw===null ? '—' : esc(s.qpcrRaw)}</td>
+        <td class="${s.excludeSeverity==='fail'?'reason-fail':'reason-warn'}">${esc(s.excludeReason)}</td>
+        ${showSourceCol ? '<td>'+esc(s.sourceFile)+'</td>' : ''}
+      </tr>`).join('');
+    return `<table class="excluded-table">
+      <thead><tr><th>Barcode</th><th>Product</th><th>Molecular Index</th><th>Material type</th><th>qPCR (raw)</th><th>Reason</th>${showSourceCol ? '<th>Source</th>' : ''}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  }
+
+  // ---------- export ----------
+  document.getElementById('downloadBtn').addEventListener('click', () => {
+    if (!lastRun) return;
+    const assignRows = [];
+    lastRun.groups.forEach(g => {
+      g.samples.forEach(s => {
+        assignRows.push({
+          'Pool Group': g.id,
+          'Bucket': g.bucket === 'saliva' ? 'Saliva' : 'Other',
+          'Coverage Tier': g.tier + 'X',
+          'Barcode': s.barcode,
+          'Product': s.product,
+          'Molecular Index': s.molIndex,
+          'Original Material Type': s.material,
+          'qPCR (avg nM)': isNaN(s.qpcr) ? '' : Number(s.qpcr.toFixed(3)),
+          'Coverage Source': s.control ? 'Control (tier not applicable)' : (s.tierSource==='clinical' ? 'Clinical (30X)' : s.tierSource==='matched' ? 'Matched from Product' : 'Assumed 30X (no coverage found)'),
+          'Is Control': s.control ? 'Y' : 'N',
+          'Is Clinical': s.clinical ? 'Y' : 'N',
+          'Group Sample Count': g.samples.length,
+          'Group Exact Lanes': Number((g.samples.length * idealFraction(g.tier)).toFixed(3)),
+          'Group Lanes (Rounded)': roundLanes(g.samples.length * idealFraction(g.tier)),
+          'Below Minimum Group': g.belowMin ? 'Y' : 'N',
+          'Source File': s.sourceFile,
+          'Source Row': s.rowNum
+        });
+      });
+    });
+    const excludedRows = lastRun.excluded.map(s => ({
+      'Barcode': s.barcode,
+      'Product': s.product,
+      'Molecular Index': s.molIndex,
+      'Original Material Type': s.material,
+      'qPCR (raw)': s.qpcrRaw,
+      'Reason': s.excludeReason,
+      'Source File': s.sourceFile,
+      'Source Row': s.rowNum
+    }));
+    const groupCount = lastRun.groups.length;
+    const totalLanes = Math.round(lastRun.tierSummary.reduce((a,t)=>a+t.lanes,0));
+    const sourceFileCount = new Set(lastRun.samples.map(s=>s.sourceFile)).size;
+    const summaryRows = [
+      {Metric:'Source files', Value: sourceFileCount},
+      {Metric:'Rows read', Value: lastRun.samples.length},
+      {Metric:'Passed QC', Value: lastRun.samples.length - lastRun.excluded.length},
+      {Metric:'Excluded / flagged', Value: lastRun.excluded.length},
+      {Metric:'Pool groups formed', Value: groupCount},
+      {Metric:'Groups below minimum (8)', Value: lastRun.groups.filter(g=>g.belowMin).length},
+      {Metric:'Full-lane capacity (X)', Value: fullLaneCapacity()},
+      {Metric:'Total lanes needed', Value: totalLanes},
+    ];
+    const laneSummaryRows = lastRun.tierSummary.map(t => ({
+      'Coverage Tier': t.tier + 'X',
+      'Samples': t.sampleCount,
+      'Ideal Lane Fraction': Number(t.fraction.toFixed(4)),
+      'Exact Lanes': Number(t.exactLanesValue.toFixed(3)),
+      'Lanes Needed (Rounded, 15% rule)': t.lanes
+    }));
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(assignRows), 'Pool Assignments');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(excludedRows), 'Excluded - Needs Review');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(laneSummaryRows), 'Lane Summary by Tier');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), 'Summary');
+    XLSX.writeFile(wb, 'pool-manifest.xlsx');
+  });
+
+  updateTierFractionsDisplay();
+})();
+</script>
+</body>
+</html>
